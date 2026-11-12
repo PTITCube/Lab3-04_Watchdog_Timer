@@ -1,24 +1,61 @@
-# Lab3-04_Watchdog_Timer
+# Lab 3-04: Bộ Định Thời Giám Sát Phần Cứng Watchdog (Watchdog Timer)
 
-**Cơ chế Giám sát Chó Canh (Watchdog Timer - WDT) & Phục hồi Lỗi FDIR**
+> **Phân hệ:** C&DH (Command & Data Handling)  
+> **Thư viện yêu cầu:** `PTITCube Library v1.1.0`  
+> **Nền tảng:** PlatformIO / ESP32-WROOM-32 (OBC)
 
-Bài thực hành thuộc Phân hệ C&DH (Lab 3) trong hệ thống PTITCube.
+---
 
-## 1. Mục tiêu
-- Cấu hình và kích hoạt **Task Watchdog Timer (TWDT)** trên ESP32 để giám sát các tác vụ C&DH của CubeSat.
-- Nắm vững chu trình "cho chó ăn / đá chó canh" (`esp_task_wdt_reset()`) để báo hiệu tác vụ vẫn đang hoạt động bình thường.
-- Thực hành kỹ thuật **Bơm lỗi (Fault Injection)** thông qua Nút nhấn (GPIO 4) hoặc lệnh Serial ('h'/'f') để mô phỏng sự cố treo hệ thống do bức xạ vũ trụ (Single Event Upset).
-- Kiểm chứng khả năng tự động cưỡng bức khởi động lại (Hardware Reset) của Watchdog Timer và phân tích nguyên nhân reset (`esp_reset_reason()`).
+## 📖 1. Mục Tiêu & Mô Tả Bài Thực Hành
 
-## 2. Phần cứng sử dụng
-- **ESP32 NodeMCU OBC**
-- **Heartbeat LED:** GPIO 2 (tích hợp trên bo mạch, từ Lab 1).
-- **Nút nhấn bơm lỗi:** GPIO 4 (`INPUT_PULLUP`, từ Lab 1).
-- **Serial Monitor:** Cổng USB UART (Baudrate: `115200`).
+Kích hoạt bộ đếm thời gian giám sát Task Watchdog Timer (TWDT), thực hiện nuôi chó (feed watchdog) định kỳ và quan sát cơ chế tự reset khi hệ thống bị treo.
 
-## 3. Các bước thực nghiệm
-1. Nạp code và mở Serial Monitor ở tốc độ 115200 baud.
-2. Quan sát LED GPIO 2 nhấp nháy đều đặn mỗi 500ms, Serial in thông báo đá chó canh thành công.
-3. Nhấn Nút nhấn (GPIO 4) hoặc gửi ký tự `h` vào Serial Monitor: Tác vụ ngừng đá chó canh và rơi vào vòng lặp vô hạn.
-4. Sau 3 giây (Timeout của WDT), vi điều khiển tự động reset cứng.
-5. Khi khởi động lại, hệ thống nhận diện `ESP_RST_TASK_WDT`, in thông báo phục hồi FDIR thành công và nháy LED 5 lần để báo hiệu.
+---
+
+## 🔌 2. Sơ Đồ Chân Phần Cứng (Hardware Pinout)
+
+| Ngoại vi | Cơ chế | Mô tả |
+| :--- | :--- | :--- |
+| Hardware Timer | esp_task_wdt | Tự động reset vi điều khiển sau 5 giây nếu không nhận được feed |
+
+---
+
+## 🛠️ 3. Cấu Hình Phần Mềm & Thư Viện
+
+- **Thư viện cốt lõi:** Thư mục `lib/PTITCube` tích hợp sẵn bộ thư viện phiên bản mới nhất `v1.1.0` với các phân hệ phân lớp:
+  - `CDH`: Quản lý luồng xuất nhập dữ liệu `cdh` (Stream inheritance) và hệ thống tệp FAT32 trên thẻ nhớ MicroSD.
+  - `EPS`: Quản lý năng lượng, đọc IC MAX17048 qua I2C.
+  - `Sensor`: Đọc cụm cảm biến môi trường BMP280, cảm biến quán tính 6-DoF MPU6500, từ kế QMC5883L và định vị GNSS L76X.
+  - `COM`: Quản lý module vô tuyến LoRa Ebyte E32 qua giao tiếp UART2.
+- **Kênh giám sát Console:**
+  - **Công cụ:** `cdh (PTIT_CDH stream - 115200 baud)`
+  - **Tốc độ Baud:** `115200 bps`
+  - **Lưu ý chuẩn hóa:** Kể từ Lab 3, mọi luồng in debug console được chuẩn hóa qua đối tượng `cdh` (`PTIT_CDH cdh;`) kế thừa trực tiếp từ lớp `Stream`/`Print` của Arduino, thay thế hoàn toàn cho `Serial` thông thường.
+
+---
+
+## 🚀 4. Hướng Dẫn Biên Dịch & Nạp Firmware
+
+Sử dụng **PlatformIO CLI** hoặc giao diện **VSCode / PlatformIO IDE**:
+
+```bash
+# 1. Di chuyển vào thư mục dự án
+cd Lab3-04_Watchdog_Timer
+
+# 2. Biên dịch mã nguồn
+pio run
+
+# 3. Nạp firmware vào vi điều khiển vệ tinh
+pio run -t upload
+
+# 4. Mở cửa sổ giám sát Serial Monitor
+pio device monitor -b 115200
+```
+
+---
+
+## 📝 5. Lưu Ý Kỹ Thuật
+
+- Cơ chế cốt tử đảm bảo vệ tinh không bị kẹt vĩnh viễn trên quỹ đạo khi gặp sự cố SEU.
+- Không chèn các lệnh in `println()` trang trí dư thừa làm nghẽn bộ đệm UART khi vệ tinh vận hành ở tần số cao.
+- Kiểm tra kết nối cáp USB-UART và nguồn pin trước khi thực hiện nạp code.
