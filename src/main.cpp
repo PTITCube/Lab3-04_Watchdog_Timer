@@ -129,10 +129,7 @@ void setup() {
     esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
 
     cdh.println("[HƯỚNG DẪN TEST]:");
-    cdh.println("  - Quan sát LED GPIO 2 nhấp nháy: Hệ thống đang chạy tốt và nạp Watchdog định kỳ.");
-    cdh.println("  - Nhấn Nút nhấn (GPIO 4) HOẶC gửi ký tự 'f'/'h' qua cdh: Kích hoạt lỗi treo.");
-    cdh.println("  - Sau 3 giây không được nạp, Watchdog sẽ tự động kích hoạt reset hệ thống!");
-    cdh.println("==================================================\n");
+    cdh.println("[INFO] TWDT dang giam sat (Timeout: 3s). Gui 'f' qua cdh de kich hoat loi treo.");
 
     // 3. Tạo tác vụ FreeRTOS
     xTaskCreatePinnedToCore(
