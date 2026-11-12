@@ -1,73 +1,161 @@
 /**
- * VÍ DỤ 8: EVENT-DRIVEN (HƯỚNG SỰ KIỆN) & TIẾT KIỆM PIN
+ * LAB 3 - VÍ DỤ 04: GIÁM SÁT CHÓ CANH (WATCHDOG TIMER) & TỰ PHỤC HỒI HỆ THỐNG (FDIR)
  * 
- * Mô tả:
- * Thay vì gửi LoRa liên tục mỗi 5 giây gây tốn pin, vệ tinh trong ví dụ này 
- * sẽ "im lặng". Nó chỉ phát sóng LoRa về mặt đất KHI VÀ CHỈ KHI phát hiện
- * các sự kiện bất thường (Nhiệt độ quá cao, hoặc Phát hiện đang Rơi Tự Do).
+ * Mục tiêu:
+ * - Kích hoạt Task Watchdog Timer (TWDT) trên ESP32 để bảo vệ hệ thống C&DH của CubeSat.
+ * - Hiểu rõ cơ chế nạp lại chó canh ("Feed / Kick Watchdog") trong tác vụ định kỳ.
+ * - Mô phỏng sự cố treo vi xử lý (Fault Injection) bằng Nút nhấn (GPIO 4) hoặc lệnh Serial ('h'/'f').
+ * - Quan sát Watchdog kích hoạt khởi động lại phần cứng và kiểm tra nguyên nhân reset (Reset Reason).
+ * 
+ * Linh kiện sử dụng (hoàn toàn từ Lab 1):
+ * - ESP32 NodeMCU OBC
+ * - LED trạng thái (GPIO 2)
+ * - Nút nhấn mô phỏng sự cố (GPIO 4 - INPUT_PULLUP)
+ * - Cổng Serial Monitor (115200 baud)
  */
 
 #include <Arduino.h>
-#include <PTITCube.h>
+#include <esp_task_wdt.h>
 
-PTIT_Sensor sensor;
-PTIT_COM lora;
-PTIT_Scheduler scheduler;
+#define LED_PIN         2   // LED nhịp tim (Heartbeat LED)
+#define BUTTON_PIN      4   // Nút nhấn kích hoạt sự cố treo (Fault Injection)
+#define WDT_TIMEOUT_SEC 3   // Thời gian timeout của Watchdog (3 giây)
 
-// Ngưỡng cảnh báo
-const float TEMP_CRITICAL = 45.0; // Độ C
-const float FREEFALL_G    = 1.0;  // m/s^2 (gia tốc gần 0)
+// Biến cờ kích hoạt lỗi treo vi xử lý
+static volatile bool simulateFault = false;
 
-void anomalyDetectionTask() {
-    if (PTIT_Scheduler::lock(PTIT_BUS_I2C, 100)) {
-        sensor.update();
-        PTIT_Scheduler::unlock(PTIT_BUS_I2C);
-    }
+// Task 1: Tác vụ nhịp tim & nạp Watchdog Timer (Chạy chu kỳ 500ms)
+void heartbeatTask(void* pvParameters) {
+    // Đăng ký tác vụ này với Task Watchdog Timer (TWDT)
+    esp_task_wdt_add(NULL);
 
-    float t = sensor.getTemperature();
-    float ax = abs(sensor.getAccX());
+    bool ledState = false;
 
-    bool isEmergency = false;
-    String alertMsg = "EMERGENCY: ";
-
-    // 1. Kiểm tra nhiệt hoả hoạn
-    if (t > TEMP_CRITICAL) {
-        isEmergency = true;
-        alertMsg += "OVERHEAT (" + String(t, 1) + "C)! ";
-    }
-
-    // 2. Kiểm tra rơi
-    if (ax < FREEFALL_G) {
-        isEmergency = true;
-        alertMsg += "FREEFALL DETECTED! ";
-    }
-
-    // NẾU CÓ SỰ CỐ -> GỬI LORA NGAY LẬP TỨC
-    if (isEmergency) {
-        PTIT_Scheduler::println("\n[SỰ CỐ] " + alertMsg);
-        
-        if (PTIT_Scheduler::lock(PTIT_BUS_LORA, 200)) {
-            lora.sendMessage(alertMsg);
-            PTIT_Scheduler::unlock(PTIT_BUS_LORA);
+    for (;;) {
+        // Nếu không có sự cố mô phỏng -> Đá chó canh (Reset bộ đếm Watchdog về 0)
+        if (!simulateFault) {
+            esp_task_wdt_reset();
+            ledState = !ledState;
+            digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+            Serial.printf("[OBC HEARTBEAT] Uptime: %lu ms | Đã đá chó canh (Feed WDT) thành công.\n", millis());
+        } else {
+            // Khi bị mô phỏng sự cố: Cố tình ngưng đá chó canh và rơi vào vòng lặp vô tận (Freeze)
+            Serial.println("\n[SỰ CỐ C&DH] >>> Tác vụ bị treo vô hạn (Infinite Loop)! NGỪNG ĐÁ CHÓ CANH... <<<");
+            Serial.printf("[SỰ CỐ C&DH] Watchdog sẽ hết hạn và cưỡng bức RESET sau tối đa %d giây!\n", WDT_TIMEOUT_SEC);
+            
+            // Bật sáng LED liên tục để báo hiệu đang bị treo
+            digitalWrite(LED_PIN, HIGH);
+            
+            while (1) {
+                // Treo hoàn toàn ở đây, không bao giờ gọi esp_task_wdt_reset()
+                delay(100);
+            }
         }
+
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
+}
+
+// Task 2: Tác vụ giám sát nút nhấn & lệnh Serial để kích hoạt lỗi (Chạy chu kỳ 100ms)
+void faultMonitorTask(void* pvParameters) {
+    for (;;) {
+        // 1. Kiểm tra nút nhấn trên chân GPIO 4 (nhấn = LOW)
+        if (digitalRead(BUTTON_PIN) == LOW) {
+            simulateFault = true;
+        }
+
+        // 2. Kiểm tra lệnh gõ từ Serial Monitor ('f' = Fault, 'h' = Hang)
+        if (Serial.available() > 0) {
+            char cmd = Serial.read();
+            if (cmd == 'f' || cmd == 'h' || cmd == 'F' || cmd == 'H') {
+                simulateFault = true;
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+// Hàm phân tích và in ra nguyên nhân khởi động lại của vi điều khiển
+void printResetReason(esp_reset_reason_t reason) {
+    Serial.println("--------------------------------------------------");
+    Serial.print("[BOOT] Nguyên nhân khởi động lại (Reset Reason): ");
+    switch (reason) {
+        case ESP_RST_POWERON:
+            Serial.println("Cấp nguồn mới (Power-on Reset) - Khởi động bình thường.");
+            break;
+        case ESP_RST_SW:
+            Serial.println("Khởi động lại bằng phần mềm (Software Reset).");
+            break;
+        case ESP_RST_PANIC:
+            Serial.println("Sự cố tràn bộ nhớ hoặc ngoại lệ phần mềm (Exception/Panic Reset).");
+            break;
+        case ESP_RST_TASK_WDT:
+            Serial.println(">>> TASK WATCHDOG TIMER RESET (TWDT) <<<");
+            Serial.println("[FDIR] HỆ THỐNG ĐÃ TỰ ĐỘNG PHỤC HỒI THÀNH CÔNG SAU KHI BỊ TREO!");
+            // Nháy LED 5 lần để báo hiệu phục hồi thành công từ Watchdog
+            for (int i = 0; i < 5; i++) {
+                digitalWrite(LED_PIN, HIGH); delay(100);
+                digitalWrite(LED_PIN, LOW);  delay(100);
+            }
+            break;
+        case ESP_RST_INT_WDT:
+            Serial.println("Hardware Interrupt Watchdog Reset.");
+            break;
+        default:
+            Serial.printf("Mã lỗi: %d\n", reason);
+            break;
+    }
+    Serial.println("--------------------------------------------------");
 }
 
 void setup() {
     Serial.begin(115200);
     while (!Serial) { delay(10); }
 
-    Serial.println("\n[EXAMPLE] Event-Driven Satellite Mode Started.");
-    
-    sensor.init();
-    lora.init();
+    pinMode(LED_PIN, OUTPUT);
+    pinMode(BUTTON_PIN, INPUT_PULLUP); // Nút nhấn kích hoạt sự cố (Lab 1)
 
-    // Quét liên tục mỗi 200ms để không bỏ lỡ khoảnh khắc rơi
-    scheduler.addTask("AnomalyScanner", anomalyDetectionTask, 200, 1, 2);
+    Serial.println("\n==================================================");
+    Serial.println("   PTITCUBE - LAB 3: WATCHDOG TIMER & FDIR DEMO   ");
+    Serial.println("==================================================");
 
-    scheduler.start();
+    // 1. Kiểm tra nguyên nhân reset trước đó
+    esp_reset_reason_t reason = esp_reset_reason();
+    printResetReason(reason);
+
+    // 2. Khởi tạo Task Watchdog Timer với timeout 3 giây, panic = true (tự động reboot)
+    Serial.printf("[WDT] Đang kích hoạt Task Watchdog Timer (Timeout = %d giây)...\n", WDT_TIMEOUT_SEC);
+    esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+
+    Serial.println("[HƯỚNG DẪN TEST]:");
+    Serial.println("  - Quan sát LED GPIO 2 nhấp nháy: Hệ thống đang chạy tốt và nạp Watchdog định kỳ.");
+    Serial.println("  - Nhấn Nút nhấn (GPIO 4) HOẶC gửi ký tự 'f'/'h' qua Serial: Kích hoạt lỗi treo.");
+    Serial.println("  - Sau 3 giây không được nạp, Watchdog sẽ tự động kích hoạt reset hệ thống!");
+    Serial.println("==================================================\n");
+
+    // 3. Tạo tác vụ FreeRTOS
+    xTaskCreatePinnedToCore(
+        heartbeatTask,
+        "HeartbeatWDT",
+        2048,
+        NULL,
+        2,
+        NULL,
+        1
+    );
+
+    xTaskCreatePinnedToCore(
+        faultMonitorTask,
+        "FaultMonitor",
+        2048,
+        NULL,
+        1,
+        NULL,
+        1
+    );
 }
 
 void loop() {
-    // Để trống
+    // Để trống. Toàn bộ logic chạy trong các Task FreeRTOS.
 }
