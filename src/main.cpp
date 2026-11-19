@@ -82,7 +82,7 @@ void faultMonitorTask(void* pvParameters) {
 
 // Hàm phân tích và in ra nguyên nhân khởi động lại của vi điều khiển
 void printResetReason(esp_reset_reason_t reason) {
-        cdh.print("[BOOT] Nguyên nhân khởi động lại (Reset Reason): ");
+    cdh.print("[BOOT] Nguyên nhân khởi động lại (Reset Reason): ");
     switch (reason) {
         case ESP_RST_POWERON:
             cdh.println("Cấp nguồn mới (Power-on Reset) - Khởi động bình thường.");
@@ -109,16 +109,16 @@ void printResetReason(esp_reset_reason_t reason) {
             cdh.printf("Mã lỗi: %d\n", reason);
             break;
     }
-    }
+}
 
 void setup() {
     cdh.begin(115200);
     while (!cdh) { delay(10); }
 
     pinMode(LED_PIN, OUTPUT);
-    pinMode(BUTTON_PIN, INPUT_PULLUP); // Nút nhấn kích hoạt sự cố (Lab 1)
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-        cdh.println("   PTITCUBE - LAB 3: WATCHDOG TIMER & FDIR DEMO   ");
+    cdh.println("   PTITCUBE - LAB 3: WATCHDOG TIMER & FDIR DEMO   ");
     
     // 1. Kiểm tra nguyên nhân reset trước đó
     esp_reset_reason_t reason = esp_reset_reason();
