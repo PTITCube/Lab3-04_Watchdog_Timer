@@ -58,7 +58,6 @@ void setup() {
                (reason == ESP_RST_TASK_WDT) ? "Task Watchdog Reset (TWDT da tu phuc hoi)" : "Normal Power-on/Reset");
 
     esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
-    cdh.println("WDT: San sang (Timeout: 3s). Nhan nut GPIO 4 hoac go 'fault' de thu nghiem.");
 
     xTaskCreatePinnedToCore(heartbeatTask,    "HeartbeatWDT", 2048, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(faultMonitorTask, "FaultMonitor", 2048, NULL, 1, NULL, 1);
