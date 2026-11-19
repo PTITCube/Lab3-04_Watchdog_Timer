@@ -24,7 +24,7 @@ void heartbeatTask(void* pvParameters) {
             ledState = !ledState;
             digitalWrite(LED_PIN, ledState ? HIGH : LOW);
         } else {
-            cdh.println("[WDT] Kích hoạt sự cố treo! Ngừng feed Watchdog -> Rebooting...");
+            cdh.println("WDT: Kích hoạt sự cố treo! Ngừng feed Watchdog -> Rebooting...");
             digitalWrite(LED_PIN, HIGH);
             while (1) {
                 delay(100);
@@ -52,7 +52,7 @@ void faultMonitorTask(void* pvParameters) {
 }
 
 void printResetReason(esp_reset_reason_t reason) {
-    cdh.print("[BOOT] Reset Reason: ");
+    cdh.print("BOOT: Reset Reason: ");
     switch (reason) {
         case ESP_RST_POWERON:  cdh.println("Power-on Reset"); break;
         case ESP_RST_SW:       cdh.println("Software Reset"); break;
@@ -74,7 +74,7 @@ void setup() {
     // Khởi tạo Task Watchdog Timer
     esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
 
-    cdh.println("[WDT] Active (Timeout: 3s). Nhấn nút GPIO 4 hoặc gửi 'f' để thử nghiệm treo.");
+    cdh.println("WDT: Active (Timeout: 3s). Nhấn nút GPIO 4 hoặc gửi 'f' để thử nghiệm treo.");
 
     xTaskCreatePinnedToCore(heartbeatTask,    "HeartbeatWDT", 2048, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(faultMonitorTask, "FaultMonitor", 2048, NULL, 1, NULL, 1);
