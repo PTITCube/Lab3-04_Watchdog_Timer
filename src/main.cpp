@@ -1,5 +1,5 @@
 /**
- * VÍ DỤ 3-04: GIÁM SÁT CHÓ CANH (WATCHDOG TIMER) & TỰ PHỤC HỒI
+ * VÍ DỤ 3-04: GIÁM SÁT HỆ THỐNG VỚI WATCHDOG TIMER & TỰ PHỤC HỒI
  */
 #include <Arduino.h>
 #include <PTITCube.h>

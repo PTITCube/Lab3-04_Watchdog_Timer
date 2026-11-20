@@ -8,7 +8,7 @@
 
 ## 📖 1. Mục Tiêu & Mô Tả Bài Thực Hành
 
-Kích hoạt bộ đếm thời gian giám sát Task Watchdog Timer (TWDT), thực hiện nuôi chó (feed watchdog) định kỳ và quan sát cơ chế tự reset khi hệ thống bị treo.
+Kích hoạt bộ đếm thời gian giám sát Task Watchdog Timer (TWDT), thực hiện làm tươi Watchdog Timer (Feed Watchdog) định kỳ và quan sát cơ chế tự reset khi hệ thống bị treo.
 
 ---
 
