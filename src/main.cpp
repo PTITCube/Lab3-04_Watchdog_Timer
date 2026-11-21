@@ -48,7 +48,7 @@ void faultMonitorTask(void* pvParameters) {
 }
 
 void setup() {
-    cdh.begin(115200);
+    cdh.begin();
 
     pinMode(LED_PIN, OUTPUT);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
