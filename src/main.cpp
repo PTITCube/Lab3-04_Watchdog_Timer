@@ -3,7 +3,6 @@
  */
 #include <Arduino.h>
 #include <PTITCube.h>
-#include <esp_task_wdt.h>
 
 PTIT_CDH cdh;
 
@@ -14,12 +13,12 @@ PTIT_CDH cdh;
 static volatile bool simulateFault = false;
 
 void heartbeatTask(void* pvParameters) {
-    esp_task_wdt_add(NULL);
+    cdh.wdtAdd();
     bool ledState = false;
 
     for (;;) {
         if (!simulateFault) {
-            esp_task_wdt_reset();
+            cdh.wdtFeed();
             ledState = !ledState;
             digitalWrite(LED_PIN, ledState);
         } else {
@@ -27,7 +26,7 @@ void heartbeatTask(void* pvParameters) {
             digitalWrite(LED_PIN, HIGH);
             while (1) delay(100);
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
+        cdh.delayMs(500);
     }
 }
 
@@ -43,7 +42,7 @@ void faultMonitorTask(void* pvParameters) {
                 simulateFault = true;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        cdh.delayMs(100);
     }
 }
 
@@ -53,14 +52,13 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-    esp_reset_reason_t reason = esp_reset_reason();
     cdh.printf("BOOT: Nguyen nhan khoi dong: %s\n", 
-               (reason == ESP_RST_TASK_WDT) ? "Task Watchdog Reset (TWDT da tu phuc hoi)" : "Normal Power-on/Reset");
+               cdh.wasWatchdogReset() ? "Task Watchdog Reset (TWDT da tu phuc hoi)" : "Normal Power-on/Reset");
 
-    esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+    cdh.wdtInit(WDT_TIMEOUT_SEC);
 
-    xTaskCreatePinnedToCore(heartbeatTask,    "HeartbeatWDT", 2048, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(faultMonitorTask, "FaultMonitor", 2048, NULL, 1, NULL, 1);
+    cdh.createTask(heartbeatTask,    "HeartbeatWDT", 2048, 2);
+    cdh.createTask(faultMonitorTask, "FaultMonitor", 2048, 1);
 }
 
 void loop() {
